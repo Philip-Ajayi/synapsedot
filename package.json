@@ -1,0 +1,26 @@
+{
+  "name": "synapsedot-monorepo",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Portaldot Cross-Runtime Interoperability Engine",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "build:transcoder": "npm run build --workspace=@synapsedot/transcoder",
+    "build:evm": "npm run compile --workspace=@synapsedot/contracts-evm",
+    "build:relayer": "npm run build --workspace=@synapsedot/relayer",
+    "build:web": "npm run build --workspace=@synapsedot/web",
+    "build": "npm run build:transcoder && npm run build:evm && npm run build:relayer && npm run build:web",
+    "test:transcoder": "npm run test --workspace=@synapsedot/transcoder",
+    "test:evm": "npm run test --workspace=@synapsedot/contracts-evm",
+    "test:relayer": "npm run test --workspace=@synapsedot/relayer",
+    "test": "npm run test:transcoder && npm run test:evm && npm run test:relayer",
+    "relayer:start": "npm run start --workspace=@synapsedot/relayer",
+    "web:dev": "npm run dev --workspace=@synapsedot/web",
+    "docker:up": "docker compose up --build"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.5"
+  }
+}

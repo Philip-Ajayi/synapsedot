@@ -1,0 +1,42 @@
+version: '3.8'
+
+services:
+  synapse-relayer:
+    build:
+      context: .
+      dockerfile: packages/relayer/Dockerfile
+    container_name: synapse-relayer
+    restart: unless-stopped
+    environment:
+      - PORTALDOT_EVM_RPC_HTTP=${PORTALDOT_EVM_RPC_HTTP:-http://host.docker.internal:8545}
+      - PORTALDOT_EVM_RPC_WS=${PORTALDOT_EVM_RPC_WS:-ws://host.docker.internal:8546}
+      - PORTALDOT_SUBSTRATE_WS=${PORTALDOT_SUBSTRATE_WS:-ws://host.docker.internal:9944}
+      - EVM_RELAYER_PRIVATE_KEY=${EVM_RELAYER_PRIVATE_KEY:-0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80}
+      - SUBSTRATE_RELAYER_SEED=${SUBSTRATE_RELAYER_SEED:-//Alice}
+      - DISPATCHER_CONTRACT_ADDRESS=${DISPATCHER_CONTRACT_ADDRESS}
+      - WASM_RECEIVER_CONTRACT_ADDRESS=${WASM_RECEIVER_CONTRACT_ADDRESS}
+      - RELAYER_SQLITE_PATH=/data/synapse.db
+    volumes:
+      - relayer-data:/data
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  synapse-web:
+    build:
+      context: .
+      dockerfile: packages/web/Dockerfile
+    container_name: synapse-web
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - NEXT_PUBLIC_EVM_RPC=http://localhost:8545
+      - NEXT_PUBLIC_SUBSTRATE_WS=ws://localhost:9944
+      - NEXT_PUBLIC_DISPATCHER_ADDRESS=${DISPATCHER_CONTRACT_ADDRESS}
+      - NEXT_PUBLIC_VAULT_ADDRESS=${VAULT_CONTRACT_ADDRESS}
+      - NEXT_PUBLIC_WASM_RECEIVER_ADDRESS=${WASM_RECEIVER_CONTRACT_ADDRESS}
+    depends_on:
+      - synapse-relayer
+
+volumes:
+  relayer-data:

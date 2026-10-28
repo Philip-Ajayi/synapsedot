@@ -1,0 +1,72 @@
+# ==========================================
+# Secrets & Environment Variables
+# ==========================================
+.env
+.env*.local
+.env.production
+.env.development
+*.env
+.env.example
+
+# Wallet Keys & Keystores
+keystore/
+*.key
+*.pem
+
+# ==========================================
+# Node.js & Monorepo Dependencies
+# ==========================================
+node_modules/
+packages/*/node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# ==========================================
+# Hardhat / EVM Build Artifacts
+# ==========================================
+packages/contracts-evm/artifacts/
+packages/contracts-evm/cache/
+packages/contracts-evm/typechain-types/
+artifacts/
+cache/
+typechain-types/
+
+# ==========================================
+# Rust / Wasm (Cargo) Build Artifacts
+# ==========================================
+packages/contracts-wasm/target/
+target/
+**/*.rs.bk
+Cargo.lock
+
+# ==========================================
+# Next.js & Frontend Build Outputs
+# ==========================================
+packages/web/.next/
+packages/web/out/
+.next/
+dist/
+packages/*/dist/
+*.tsbuildinfo
+.turbo/
+
+# ==========================================
+# Relayer Local Storage / Databases
+# ==========================================
+*.db
+*.sqlite
+*.sqlite3
+relayer-data/
+*.log
+
+# ==========================================
+# System & Editor Files
+# ==========================================
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
