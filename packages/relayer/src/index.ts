@@ -19,56 +19,71 @@ async function main() {
   console.log("=================================================");
 
   const db = new RelayDatabase(CONFIG.sqlitePath);
+  db.log('INFO', 'Relayer daemon booted successfully.');
+
   const evmListener = new EvmListener(db);
   const wasmExecutor = new WasmExecutor();
 
   await wasmExecutor.init();
   await evmListener.start();
 
-  // Execution & Processing Loop
+  let isLoopRunning = false;
+
   setInterval(async () => {
-    const pendingJobs = db.getPendingDispatches();
-    for (const job of pendingJobs) {
-      try {
-        console.log(`[PROCESSOR] Processing job dispatch_id: ${job.dispatch_id}`);
+    if (isLoopRunning) return;
+    isLoopRunning = true;
 
-        // Step 1: Transcode ABI to SCALE
-        const scaleBytes = DynamicTranscoder.transcodeAbiToScale(
-          job.abi_payload,
-          MINT_TRANSCODE_DEF
-        );
-        const scaleHex = '0x' + Buffer.from(scaleBytes).toString('hex');
-        db.updateStatus(job.dispatch_id, 'TRANSCODED', scaleHex);
+    try {
+      const pendingJobs = db.getPendingDispatches();
+      for (const job of pendingJobs) {
+        try {
+          db.log('EXEC', `Ingesting dispatch [${job.dispatch_id.slice(0, 10)}...] from ${job.sender_address}`);
 
-        // Step 2: Sign and submit extrinsic to ink! WASM Runtime
-        db.updateStatus(job.dispatch_id, 'SUBMITTING');
-        const wasmTxHash = await wasmExecutor.submitContractCall(
-          job.target_wasm_contract,
-          scaleBytes
-        );
-        console.log(`[PROCESSOR] Substrate Execution Succeeded: TxHash ${wasmTxHash}`);
-        db.updateStatus(job.dispatch_id, 'CONFIRMED', undefined, wasmTxHash);
+          // Step 1: Dynamic Transcoding
+          const scaleBytes = DynamicTranscoder.transcodeAbiToScale(
+            job.abi_payload,
+            MINT_TRANSCODE_DEF
+          );
+          const scaleHex = '0x' + Buffer.from(scaleBytes).toString('hex');
+          db.updateStatus(job.dispatch_id, 'TRANSCODED', scaleHex);
+          db.log('EXEC', `Transcoded ABI to SCALE (${scaleBytes.length} bytes LE).`);
 
-        // Step 3: Settle on EVM Dispatcher
-        const evmSettleTx = await evmListener.markSettledOnChain(job.dispatch_id, wasmTxHash);
-        console.log(`[PROCESSOR] Dispatch settled on EVM. TxHash: ${evmSettleTx}`);
-        db.updateStatus(job.dispatch_id, 'SETTLED');
-      } catch (err: any) {
-        console.error(`[PROCESSOR-ERROR] Job ${job.dispatch_id} failed:`, err.message);
-        db.incrementRetry(job.dispatch_id, err.message);
+          // Step 2: WASM Substrate Execution
+          db.updateStatus(job.dispatch_id, 'SUBMITTING');
+          const targetWasm = job.target_wasm_contract || CONFIG.wasmReceiverContract;
+          const wasmTxHash = await wasmExecutor.submitContractCall(targetWasm, scaleBytes);
 
-        if (job.retry_count >= CONFIG.maxRetries) {
-          console.warn(`[PROCESSOR] Max retries reached for ${job.dispatch_id}. Triggering refund...`);
-          try {
-            await evmListener.markRefundOnChain(job.dispatch_id, err.message || "Max retries exceeded");
-            db.updateStatus(job.dispatch_id, 'REFUNDED');
-          } catch (refundErr: any) {
-            console.error(`[CRITICAL] Refund call failed:`, refundErr.message);
+          db.updateStatus(job.dispatch_id, 'CONFIRMED', undefined, wasmTxHash);
+          db.log('SUCCESS', `Substrate extrinsic finalized! Block/Tx: ${wasmTxHash.slice(0, 18)}...`);
+
+          // Step 3: EVM Dispatch Settlement
+          const evmSettleTx = await evmListener.markSettledOnChain(job.dispatch_id, wasmTxHash);
+          db.updateStatus(job.dispatch_id, 'SETTLED');
+          db.log('SUCCESS', `EVM Dispatch settled on-chain! Tx: ${evmSettleTx.slice(0, 18)}...`);
+        } catch (err: any) {
+          const errMsg = err?.message || 'Execution error';
+          db.incrementRetry(job.dispatch_id, errMsg);
+          db.log('WARN', `Job ${job.dispatch_id.slice(0, 10)} error: ${errMsg}`);
+
+          if (job.retry_count >= CONFIG.maxRetries) {
+            db.log('WARN', `Max retries exceeded for ${job.dispatch_id.slice(0, 10)}. Issuing EVM refund...`);
+            try {
+              await evmListener.markRefundOnChain(job.dispatch_id, errMsg);
+              db.updateStatus(job.dispatch_id, 'REFUNDED');
+              db.log('SUCCESS', `Refunded dispatch fee back to ${job.refund_address}`);
+            } catch (refundErr: any) {
+              db.log('ERROR', `Refund failed: ${refundErr.message}`);
+            }
           }
         }
       }
+    } finally {
+      isLoopRunning = false;
     }
   }, CONFIG.pollIntervalMs);
 }
 
-main().catch(console.error);
+main().catch((err) => {
+  console.error('[CRITICAL] Daemon fatal crash:', err);
+  process.exit(1);
+});

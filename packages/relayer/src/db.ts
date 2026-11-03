@@ -10,7 +10,7 @@ export class RelayDatabase {
     this.initSchema();
   }
 
-  private initSchema() {
+  private initSchema(): void {
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS dispatches (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -32,10 +32,22 @@ export class RelayDatabase {
         updated_at INTEGER NOT NULL
       );
       CREATE INDEX IF NOT EXISTS idx_status ON dispatches(status);
+
+      CREATE TABLE IF NOT EXISTS sync_state (
+        key TEXT PRIMARY KEY,
+        value TEXT NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS relayer_logs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        timestamp INTEGER NOT NULL,
+        level TEXT NOT NULL,
+        message TEXT NOT NULL
+      );
     `);
   }
 
-  public insertDispatch(record: Omit<RelayRecord, 'id'>): void {
+  public insertDispatch(record: Omit<RelayRecord, 'id'>): boolean {
     const stmt = this.db.prepare(`
       INSERT OR IGNORE INTO dispatches (
         dispatch_id, source_chain, source_tx_hash, sender_address,
@@ -49,7 +61,8 @@ export class RelayDatabase {
         @error_message, @created_at, @updated_at
       )
     `);
-    stmt.run(record);
+    const info = stmt.run(record);
+    return info.changes > 0;
   }
 
   public getPendingDispatches(): RelayRecord[] {
@@ -59,6 +72,18 @@ export class RelayDatabase {
       ORDER BY id ASC LIMIT 20
     `);
     return stmt.all() as RelayRecord[];
+  }
+
+  public getRecentDispatches(limit: number = 20): RelayRecord[] {
+    const stmt = this.db.prepare(`
+      SELECT * FROM dispatches ORDER BY id DESC LIMIT ?
+    `);
+    return stmt.all(limit) as RelayRecord[];
+  }
+
+  public getDispatchById(dispatchId: string): RelayRecord | undefined {
+    const stmt = this.db.prepare(`SELECT * FROM dispatches WHERE dispatch_id = ?`);
+    return stmt.get(dispatchId) as RelayRecord | undefined;
   }
 
   public updateStatus(
@@ -78,7 +103,14 @@ export class RelayDatabase {
         updated_at = @now
       WHERE dispatch_id = @dispatchId
     `);
-    stmt.run({ dispatchId, status, scalePayload: scalePayload || null, destTxHash: destTxHash || null, error: error || null, now });
+    stmt.run({
+      dispatchId,
+      status,
+      scalePayload: scalePayload || null,
+      destTxHash: destTxHash || null,
+      error: error || null,
+      now,
+    });
   }
 
   public incrementRetry(dispatchId: string, error: string): void {
@@ -91,5 +123,31 @@ export class RelayDatabase {
       WHERE dispatch_id = @dispatchId
     `);
     stmt.run({ dispatchId, error, now });
+  }
+
+  public getLastSyncedBlock(): number {
+    const stmt = this.db.prepare(`SELECT value FROM sync_state WHERE key = 'last_evm_block'`);
+    const row = stmt.get() as { value: string } | undefined;
+    return row ? Number(row.value) : 0;
+  }
+
+  public setLastSyncedBlock(blockNumber: number): void {
+    const stmt = this.db.prepare(`
+      INSERT INTO sync_state (key, value) VALUES ('last_evm_block', ?)
+      ON CONFLICT(key) DO UPDATE SET value = excluded.value
+    `);
+    stmt.run(blockNumber.toString());
+  }
+
+  public log(level: 'INFO' | 'SUCCESS' | 'WARN' | 'EXEC' | 'ERROR', message: string): void {
+    const stmt = this.db.prepare(`
+      INSERT INTO relayer_logs (timestamp, level, message) VALUES (?, ?, ?)
+    `);
+    stmt.run(Date.now(), level, message);
+  }
+
+  public getRecentLogs(limit: number = 50): Array<{ id: number; timestamp: number; level: string; message: string }> {
+    const stmt = this.db.prepare(`SELECT * FROM relayer_logs ORDER BY id DESC LIMIT ?`);
+    return (stmt.all(limit) as any[]).reverse();
   }
 }
