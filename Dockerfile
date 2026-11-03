@@ -51,17 +51,9 @@
     COPY --from=builder /app/packages/web/package.json ./packages/web/
     COPY --from=builder /app/packages/web/next.config.mjs ./packages/web/
     
-    # Runner entrypoint: Keep web dashboard alive even if relayer retries
-    RUN printf '#!/bin/bash\n\
-    set -e\n\
-    echo "[RENDER] Booting SynapseDOT Relayer Daemon..."\n\
-    node packages/relayer/dist/index.js &\n\
-    RELAYER_PID=$!\n\
-    echo "[RENDER] Booting SynapseDOT Next.js on port \${PORT:-3000}..."\n\
-    cd packages/web && npx next start -p \${PORT:-3000} &\n\
-    WEB_PID=$!\n\
-    trap "kill -TERM \$RELAYER_PID \$WEB_PID" SIGINT SIGTERM\n\
-    wait \$WEB_PID\n' > /app/entrypoint.sh && chmod +x /app/entrypoint.sh
+    # Copy runner entrypoint and normalize line endings
+    COPY entrypoint.sh /app/entrypoint.sh
+    RUN sed -i 's/\r$//' /app/entrypoint.sh && chmod +x /app/entrypoint.sh
     
     EXPOSE 3000
     CMD ["/app/entrypoint.sh"]
