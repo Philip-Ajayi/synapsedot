@@ -14,7 +14,7 @@
     COPY packages/relayer/package.json ./packages/relayer/
     COPY packages/web/package.json ./packages/web/
     
-    # Use npm install (works without a pre-existing package-lock.json)
+    # Install monorepo dependencies
     RUN npm install
     
     # Copy complete monorepo source
