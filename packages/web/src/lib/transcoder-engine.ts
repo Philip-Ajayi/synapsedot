@@ -23,8 +23,8 @@ export function transcodeToScale(abiPayload: string, selector: string = '0x3a5b6
   const leBytes: number[] = [];
   let temp = amountBig;
   for (let i = 0; i < 16; i++) {
-    leBytes.push(Number(temp & 0xffn));
-    temp >>= 8n;
+    leBytes.push(Number(temp & BigInt(0xff)));
+    temp >>= BigInt(8);
   }
   const u128LeHex = Buffer.from(leBytes).toString('hex');
 
