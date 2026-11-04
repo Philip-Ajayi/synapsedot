@@ -14,10 +14,13 @@ interface Props {
 }
 
 export const TerminalStream: React.FC<Props> = ({ logs }) => {
-  const bottomRef = useRef<HTMLDivElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+    // Confine scroll to the terminal container only, preventing window/page scrolling
+    if (containerRef.current) {
+      containerRef.current.scrollTop = containerRef.current.scrollHeight;
+    }
   }, [logs]);
 
   return (
@@ -36,7 +39,8 @@ export const TerminalStream: React.FC<Props> = ({ logs }) => {
         </span>
       </div>
 
-      <div className="p-4 h-64 overflow-y-auto space-y-1.5 bg-[#07080d]">
+      {/* Attach ref here */}
+      <div ref={containerRef} className="p-4 h-64 overflow-y-auto space-y-1.5 bg-[#07080d]">
         {logs.map((log) => {
           let badgeColor = 'text-blue-400 bg-blue-950/50 border-blue-800/50';
           if (log.level === 'SUCCESS') badgeColor = 'text-emerald-400 bg-emerald-950/50 border-emerald-800/50';
@@ -54,7 +58,6 @@ export const TerminalStream: React.FC<Props> = ({ logs }) => {
             </div>
           );
         })}
-        <div ref={bottomRef} />
       </div>
     </div>
   );
