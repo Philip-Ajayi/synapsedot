@@ -1,8 +1,14 @@
 /**
  * Zero-dependency Substrate SS58 Address Decoder/Encoder.
- * Allows users to paste any standard Substrate format or Hex public key.
+ * Browser-safe (No Node Buffer dependency).
  */
 const BASE58_ALPHABET = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
+
+function bytesToHex(bytes: Uint8Array | number[]): string {
+  return Array.from(bytes)
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('');
+}
 
 export function ss58ToHex(address: string): string {
   const clean = address.trim();
@@ -37,19 +43,17 @@ export function ss58ToHex(address: string): string {
   }
 
   const decoded = new Uint8Array(bytes.reverse());
-  // Standard Substrate SS58 payload: [prefix byte, 32 bytes public key, 2 bytes checksum]
   if (decoded.length < 35) {
     throw new Error('Invalid Substrate address length');
   }
 
   const pubKey = decoded.subarray(1, 33);
-  return '0x' + Buffer.from(pubKey).toString('hex');
+  return '0x' + bytesToHex(pubKey);
 }
 
-export function hexToSs58(hex: string, prefix: number = 42): string {
+export function hexToSs58(hex: string): string {
   const clean = hex.startsWith('0x') ? hex.slice(2) : hex;
   if (clean.length !== 64) return hex;
-  // Fallback representation if full Blake2b is not bundled in pure browser context
   return `5...${clean.slice(0, 4)}${clean.slice(-4)}`;
 }
 
@@ -66,7 +70,7 @@ export function abiEncodeDeposit(evmAddress: string, wasmAccountIdOrSs58: string
     wasmHex32 = wasmAccountIdOrSs58.replace('0x', '').padEnd(64, '0').slice(0, 64);
   }
 
-  const amountBig = BigInt(Math.max(0, Math.floor(amountPot * 1e18)));
+  const amountBig = BigInt(Math.max(0, Math.floor((amountPot || 0) * 1e18)));
   const cleanAmount = amountBig.toString(16).padStart(64, '0');
 
   return '0x' + cleanEvm + wasmHex32 + cleanAmount;
@@ -89,7 +93,7 @@ export function transcodeToScale(abiPayload: string, selector: string = '0x3a5b6
     leBytes.push(Number(temp & BigInt(0xff)));
     temp >>= BigInt(8);
   }
-  const u128LeHex = Buffer.from(leBytes).toString('hex');
+  const u128LeHex = bytesToHex(leBytes);
 
   const cleanSelector = selector.replace('0x', '');
   const scaleHex = '0x' + cleanSelector + evmRaw20 + wasmRaw32 + u128LeHex;

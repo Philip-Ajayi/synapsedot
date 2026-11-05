@@ -1,13 +1,17 @@
 version: '3.8'
 
 services:
-  synapse-relayer:
+  synapsedot:
     build:
       context: .
-      dockerfile: packages/relayer/Dockerfile
-    container_name: synapse-relayer
+      dockerfile: Dockerfile
+    container_name: synapsedot-stack
     restart: unless-stopped
+    ports:
+      - "4000:4000"
     environment:
+      - PORT=4000
+      - NODE_ENV=production
       - PORTALDOT_EVM_RPC_HTTP=${PORTALDOT_EVM_RPC_HTTP:-http://host.docker.internal:8545}
       - PORTALDOT_EVM_RPC_WS=${PORTALDOT_EVM_RPC_WS:-ws://host.docker.internal:8546}
       - PORTALDOT_EVM_CHAIN_ID=${PORTALDOT_EVM_CHAIN_ID:-1337}
@@ -17,25 +21,6 @@ services:
       - PORTALDOT_SUBSTRATE_WS=${PORTALDOT_SUBSTRATE_WS:-ws://host.docker.internal:9944}
       - SUBSTRATE_RELAYER_SEED=${SUBSTRATE_RELAYER_SEED:-//Alice}
       - WASM_RECEIVER_CONTRACT_ADDRESS=${WASM_RECEIVER_CONTRACT_ADDRESS:-5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY}
-      - RELAYER_SQLITE_PATH=/tmp/synapse_relayer.db
-      - POLL_INTERVAL_MS=1500
-      - MAX_RETRIES=5
-      - REFUND_BUFFER_BLOCKS=50
-    volumes:
-      - /tmp:/tmp
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-
-  synapse-web:
-    build:
-      context: .
-      dockerfile: packages/web/Dockerfile
-    container_name: synapse-web
-    restart: unless-stopped
-    ports:
-      - "4000:4000"
-    environment:
-      - PORT=4000
       - NEXT_PUBLIC_EVM_RPC=${PORTALDOT_EVM_RPC_HTTP:-http://localhost:8545}
       - NEXT_PUBLIC_EVM_CHAIN_ID=1337
       - NEXT_PUBLIC_SUBSTRATE_WS=${PORTALDOT_SUBSTRATE_WS:-ws://localhost:9944}
@@ -43,7 +28,13 @@ services:
       - NEXT_PUBLIC_VAULT_ADDRESS=${VAULT_CONTRACT_ADDRESS:-0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512}
       - NEXT_PUBLIC_WASM_RECEIVER_ADDRESS=${WASM_RECEIVER_CONTRACT_ADDRESS:-5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY}
       - RELAYER_SQLITE_PATH=/tmp/synapse_relayer.db
+      - POLL_INTERVAL_MS=1500
+      - MAX_RETRIES=5
+      - REFUND_BUFFER_BLOCKS=50
     volumes:
-      - /tmp:/tmp
-    depends_on:
-      - synapse-relayer
+      - synapse-data:/tmp
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+volumes:
+  synapse-data:

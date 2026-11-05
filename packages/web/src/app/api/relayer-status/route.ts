@@ -19,12 +19,13 @@ export async function GET(request: Request) {
     });
   }
 
+  let db: Database.Database | null = null;
   try {
-    const db = new Database(dbPath, { readonly: true });
+    db = new Database(dbPath, { readonly: true, fileMustExist: true });
 
     if (dispatchId) {
       const record = db.prepare('SELECT * FROM dispatches WHERE dispatch_id = ?').get(dispatchId);
-      return NextResponse.json({ record });
+      return NextResponse.json({ record: record || null });
     }
 
     const latest = db.prepare('SELECT * FROM dispatches ORDER BY id DESC LIMIT 10').all();
@@ -37,5 +38,9 @@ export async function GET(request: Request) {
     });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
+  } finally {
+    if (db) {
+      db.close();
+    }
   }
 }

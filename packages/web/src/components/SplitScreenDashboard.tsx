@@ -6,7 +6,7 @@ import { LiveHexInspector } from './LiveHexInspector';
 import { TerminalStream, TerminalLog } from './TerminalStream';
 import { abiEncodeDeposit, transcodeToScale, ss58ToHex } from '../lib/transcoder-engine';
 import { MOCK_VAULT_ABI, switchToPortaldotNetwork } from '../lib/contracts';
-import { Lock, CheckCircle2, ShieldCheck, ExternalLink, Zap, Wallet, PlayCircle, RefreshCw } from 'lucide-react';
+import { Lock, CheckCircle2, ShieldCheck, Zap, Wallet, PlayCircle } from 'lucide-react';
 
 const VAULT_ADDRESS = process.env.NEXT_PUBLIC_VAULT_ADDRESS || "0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512";
 const EVM_RPC_URL = process.env.NEXT_PUBLIC_EVM_RPC || "http://127.0.0.1:8545";
@@ -23,7 +23,6 @@ export const SplitScreenDashboard: React.FC = () => {
   const [wasmBalance, setWasmBalance] = useState<string>('0.00');
   const [isJudgeMode, setIsJudgeMode] = useState<boolean>(false);
 
-  // Live decoded recipient hex public key
   let resolvedWasmHex = '0x0000000000000000000000000000000000000000000000000000000000000000';
   let isWasmAddressValid = true;
   try {
@@ -32,7 +31,6 @@ export const SplitScreenDashboard: React.FC = () => {
     isWasmAddressValid = false;
   }
 
-  // Live Transcode Data
   const rawAbi = abiEncodeDeposit(
     evmAccount || "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
     wasmRecipientInput,
@@ -56,7 +54,6 @@ export const SplitScreenDashboard: React.FC = () => {
     ]);
   };
 
-  // Poll live relayer daemon logs and sync state from SQLite
   useEffect(() => {
     const fetchDaemonActivity = async () => {
       try {
@@ -76,7 +73,7 @@ export const SplitScreenDashboard: React.FC = () => {
           });
         }
       } catch {
-        // Relayer daemon booting
+        // Relayer daemon syncing
       }
     };
 
@@ -134,15 +131,19 @@ export const SplitScreenDashboard: React.FC = () => {
             addLog('SUCCESS', `[EVM Dispatcher] State settled.`);
             setWasmBalance((prev) => (parseFloat(prev) + amount).toFixed(2));
             setIsProcessing(false);
+          } else if (data.record.status === 'REFUNDED' || data.record.status === 'FAILED') {
+            clearInterval(interval);
+            addLog('ERROR', `[Relayer] Dispatch execution ${data.record.status.toLowerCase()}: ${data.record.error_message || 'Reverted'}`);
+            setIsProcessing(false);
           }
         }
       } catch {
-        // Continue
+        // Continue polling
       }
 
       if (attempts > 35) {
         clearInterval(interval);
-        addLog('WARN', 'Polling timeout. Check daemon logs.');
+        addLog('WARN', 'Polling timeout reached. Check daemon logs.');
         setIsProcessing(false);
       }
     }, 2000);
@@ -184,7 +185,15 @@ export const SplitScreenDashboard: React.FC = () => {
       addLog('SUCCESS', `[Portaldot EVM] Broadcasted! TxHash: ${tx.hash}`);
 
       const receipt = await tx.wait();
-      const dispatchId = receipt.logs[0]?.topics[1] || ethers.keccak256(tx.hash);
+
+      // Extract Dispatch ID from event topics
+      let dispatchId = ethers.keccak256(tx.hash);
+      for (const log of receipt.logs) {
+        if (log.topics && log.topics.length >= 2) {
+          dispatchId = log.topics[1];
+          break;
+        }
+      }
       addLog('INFO', `Dispatch ID recorded on EVM: ${dispatchId}`);
 
       await pollRelayerUntilSettled(dispatchId);
