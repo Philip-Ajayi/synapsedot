@@ -1,13 +1,18 @@
+const chainIdNumber = Number(process.env.NEXT_PUBLIC_EVM_CHAIN_ID || 1337);
+const rpcUrl = process.env.NEXT_PUBLIC_EVM_RPC || 'http://127.0.0.1:8545';
+
 export const PORTALDOT_EVM_NETWORK = {
-  chainId: '0x' + Number(process.env.NEXT_PUBLIC_EVM_CHAIN_ID || 1337).toString(16),
-  chainName: 'Portaldot EVM Local/Testnet',
+  chainId: '0x' + chainIdNumber.toString(16),
+  chainName: chainIdNumber === 420420777 ? 'Portaldot V3 Testnet' : 'Portaldot EVM Local',
   nativeCurrency: {
     name: 'Portaldot POT',
-    symbol: 'POT',
+    symbol: chainIdNumber === 420420777 ? 'tPOT' : 'POT',
     decimals: 18,
   },
-  rpcUrls: [process.env.NEXT_PUBLIC_EVM_RPC || 'http://127.0.0.1:8545'],
-  blockExplorerUrls: ['https://explorer.portaldot.io'],
+  rpcUrls: [rpcUrl],
+  blockExplorerUrls: [
+    chainIdNumber === 420420777 ? 'https://node-console.portaldot.dev' : 'https://explorer.portaldot.io'
+  ],
 };
 
 export const DISPATCHER_ABI = [
@@ -37,11 +42,16 @@ export async function switchToPortaldotNetwork(): Promise<void> {
       params: [{ chainId: PORTALDOT_EVM_NETWORK.chainId }],
     });
   } catch (switchError: any) {
-    if (switchError.code === 4902) {
-      await ethereum.request({
-        method: 'wallet_addEthereumChain',
-        params: [PORTALDOT_EVM_NETWORK],
-      });
+    // Error 4902 indicates that the chain has not been added to MetaMask
+    if (switchError.code === 4902 || switchError?.data?.originalError?.code === 4902) {
+      try {
+        await ethereum.request({
+          method: 'wallet_addEthereumChain',
+          params: [PORTALDOT_EVM_NETWORK],
+        });
+      } catch (addError: any) {
+        throw new Error(`Failed to add network to MetaMask: ${addError.message}`);
+      }
     } else {
       throw switchError;
     }
